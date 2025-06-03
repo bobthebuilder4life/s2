@@ -90,22 +90,6 @@
       hudCtx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
       hudCtx.save();
 
-      // Draw crosshair in center
-      const cx = hudCanvas.width / 2;
-      const cy = hudCanvas.height / 2;
-      hudCtx.strokeStyle = '#fff';
-      hudCtx.lineWidth = 2;
-      hudCtx.beginPath();
-      hudCtx.moveTo(cx - 10, cy);
-      hudCtx.lineTo(cx - 2, cy);
-      hudCtx.moveTo(cx + 2, cy);
-      hudCtx.lineTo(cx + 10, cy);
-      hudCtx.moveTo(cx, cy - 10);
-      hudCtx.lineTo(cx, cy - 2);
-      hudCtx.moveTo(cx, cy + 2);
-      hudCtx.lineTo(cx, cy + 10);
-      hudCtx.stroke();
-
       // Stamina Bar background
       hudCtx.fillStyle = '#000';
       hudCtx.fillRect(20, 20, 222, 32);
@@ -164,6 +148,28 @@
         hudCtx.fillStyle = '#fff';
         hudCtx.fillText('Press SPACE to Restart', hudCanvas.width / 2, hudCanvas.height / 2 + 20);
       }
+
+      // ===== Crosshair Drawing =====
+      const centerX = hudCanvas.width / 2;
+      const centerY = hudCanvas.height / 2;
+      const size = 10; // length of each line in pixels
+      const lineWidth = 2;
+      const lineColor = '#ffffff';
+
+      hudCtx.strokeStyle = lineColor;
+      hudCtx.lineWidth = lineWidth;
+
+      // Horizontal line
+      hudCtx.beginPath();
+      hudCtx.moveTo(centerX - size, centerY);
+      hudCtx.lineTo(centerX + size, centerY);
+      hudCtx.stroke();
+
+      // Vertical line
+      hudCtx.beginPath();
+      hudCtx.moveTo(centerX, centerY - size);
+      hudCtx.lineTo(centerX, centerY + size);
+      hudCtx.stroke();
 
       hudCtx.restore();
     }
@@ -337,13 +343,13 @@
       });
 
       document.addEventListener('mousedown', (event) => {
-        if (event.button === 0) { // Left click to shoot
-          shoot();
+        if (!gameOver) {
+          shootWeapon();
         }
       });
     }
 
-    // ======== Mouse move for camera look ========
+    // ======== Mouse look ========
     function onMouseMove(event) {
       const movementX = event.movementX || 0;
       const movementY = event.movementY || 0;
@@ -354,195 +360,195 @@
     }
 
     // ======== Shooting ========
-    function shoot() {
-      if (gameOver || isReloading) return;
+    function shootWeapon() {
+      if (isReloading) return;
 
-      let now = performance.now() / 1000;
+      const now = performance.now();
       const weapon = weaponsData[currentWeapon];
 
       if (!canShoot || weapon.ammo <= 0) {
-        if (weapon.ammo <= 0) {
-          reloadWeapon();
-        }
+        if (weapon.ammo <= 0) reloadWeapon();
         return;
       }
 
-      if (now - lastShotTime < weapon.fireRate) return;
+      if (now - lastShotTime < weapon.fireRate * 1000) return;
 
       weapon.ammo--;
       lastShotTime = now;
+      canShoot = false;
 
       playShootSound();
 
-      // Raycast to enemy
-      const origin = new THREE.Vector3();
-      camera.getWorldPosition(origin);
-
-      const direction = new THREE.Vector3(0, 0, -1);
-      direction.applyQuaternion(camera.quaternion);
-
-      const raycaster = new THREE.Raycaster(origin, direction);
+      // Check if enemy in front and close enough
+      const raycaster = new THREE.Raycaster();
+      const dir = new THREE.Vector3(0, 0, -1);
+      dir.applyQuaternion(camera.quaternion);
+      raycaster.set(camera.position, dir);
 
       const intersects = raycaster.intersectObject(enemy);
-
-      if (intersects.length > 0) {
+      if (intersects.length > 0 && intersects[0].distance < 10 && enemy.visible) {
         enemyHealth -= weapon.damage;
-        playEnemyHitSound();
         if (enemyHealth <= 0) {
           enemy.visible = false;
         }
+        playEnemyHitSound();
       }
+
+      setTimeout(() => { canShoot = true; }, weapon.fireRate * 1000);
     }
 
     // ======== Reload weapon ========
     function reloadWeapon() {
-      if (gameOver || isReloading) return;
+      if (isReloading) return;
 
       const weapon = weaponsData[currentWeapon];
       if (weapon.ammo === weapon.maxAmmo) return;
 
       isReloading = true;
-      reloadStartTime = performance.now() / 1000;
+      reloadStartTime = performance.now();
       playReloadSound();
+    }
+
+    // ======== Restart Game ========
+    function restart() {
+      stamina = maxStamina;
+      health = maxHealth;
+      gameOver = false;
+      createEnemy();
+
+      weaponsData.forEach(w => w.ammo = w.maxAmmo);
+      isReloading = false;
+      canShoot = true;
+      currentWeapon = 0;
+      updateWeaponVisibility();
     }
 
     // ======== Audio setup ========
     function setupAudio() {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      // Create simple beep sounds
+      shootSoundBuffer = createBeepBuffer(0.1, 600);
+      reloadSoundBuffer = createBeepBuffer(0.3, 300);
+      enemyHitSoundBuffer = createBeepBuffer(0.05, 900);
+    }
+
+    function createBeepBuffer(durationSec, freq) {
+      const sampleRate = audioCtx.sampleRate;
+      const length = sampleRate * durationSec;
+      const buffer = audioCtx.createBuffer(1, length, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < length; i++) {
+        data[i] = Math.sin(2 * Math.PI * freq * i / sampleRate) * Math.exp(-5 * i / length);
+      }
+
+      return buffer;
     }
 
     function playShootSound() {
-      if (!audioCtx) return;
-      const oscillator = audioCtx.createOscillator();
-      oscillator.type = 'square';
-      oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
-      oscillator.connect(audioCtx.destination);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.1);
+      const source = audioCtx.createBufferSource();
+      source.buffer = shootSoundBuffer;
+      source.connect(audioCtx.destination);
+      source.start();
     }
 
     function playReloadSound() {
-      if (!audioCtx) return;
-      const oscillator = audioCtx.createOscillator();
-      oscillator.type = 'triangle';
-      oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
-      oscillator.connect(audioCtx.destination);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.5);
+      const source = audioCtx.createBufferSource();
+      source.buffer = reloadSoundBuffer;
+      source.connect(audioCtx.destination);
+      source.start();
     }
 
     function playEnemyHitSound() {
-      if (!audioCtx) return;
-      const oscillator = audioCtx.createOscillator();
-      oscillator.type = 'sawtooth';
-      oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
-      oscillator.connect(audioCtx.destination);
-      oscillator.start();
-      oscillator.stop(audioCtx.currentTime + 0.2);
+      const source = audioCtx.createBufferSource();
+      source.buffer = enemyHitSoundBuffer;
+      source.connect(audioCtx.destination);
+      source.start();
     }
 
-    // ======== Restart game ========
-    function restart() {
-      stamina = maxStamina;
-      health = maxHealth;
-      weaponsData.forEach(w => w.ammo = w.maxAmmo);
-      currentWeapon = 0;
-      updateWeaponVisibility();
-      enemy.visible = true;
-      enemyHealth = 100;
-      gameOver = false;
-      velocity.set(0, 0, 0);
-      yawObject.position.set(0, playerHeight, 0);
-      yawObject.rotation.set(0, 0, 0);
-      pitchObject.rotation.set(0, 0, 0);
-    }
-
-    // ======== Game Loop ========
+    // ======== Game loop ========
     function animate() {
       requestAnimationFrame(animate);
 
-      let time = performance.now();
-      let delta = (time - prevTime) / 1000;
-      prevTime = time;
+      const time = performance.now();
+      const delta = (time - prevTime) / 1000;
 
       if (!gameOver) {
-        updatePlayerMovement(delta);
-        updateStamina(delta);
-        updateReload(delta);
+        // Movement speed
+        let speed = 6;
+        if (isSprinting && stamina > 0 && !controls.crouch) {
+          speed = 10;
+          stamina -= staminaDrain * delta;
+          if (stamina < 0) stamina = 0;
+        } else {
+          stamina += staminaRegen * delta;
+          if (stamina > maxStamina) stamina = maxStamina;
+        }
 
+        if (controls.crouch) {
+          isCrouched = true;
+          speed = 3;
+          yawObject.position.y = playerHeight / 2;
+        } else {
+          if (isCrouched) {
+            yawObject.position.y = playerHeight;
+            isCrouched = false;
+          }
+        }
+
+        // Movement vector
+        let moveX = 0, moveZ = 0;
+        if (controls.forward) moveZ -= 1;
+        if (controls.backward) moveZ += 1;
+        if (controls.left) moveX -= 1;
+        if (controls.right) moveX += 1;
+
+        let move = new THREE.Vector3(moveX, 0, moveZ);
+        if (move.length() > 0) move.normalize();
+
+        // Adjust speed by stamina for sprint
+        move.multiplyScalar(speed);
+
+        // Apply movement to velocity
+        velocity.x += (move.x - velocity.x) * 10 * delta;
+        velocity.z += (move.z - velocity.z) * 10 * delta;
+
+        // Gravity and jumping
+        velocity.y -= gravity * delta;
+        yawObject.position.addScaledVector(velocity, delta);
+
+        // Floor collision
+        if (yawObject.position.y < playerHeight) {
+          velocity.y = 0;
+          yawObject.position.y = playerHeight;
+          canJump = true;
+        }
+
+        // Enemy shooting logic could go here (if implemented)
+
+        // Reload timer
+        if (isReloading) {
+          const weapon = weaponsData[currentWeapon];
+          if (time - reloadStartTime >= weapon.reloadTime * 1000) {
+            weapon.ammo = weapon.maxAmmo;
+            isReloading = false;
+          }
+        }
+
+        // Health check
         if (health <= 0) {
           gameOver = true;
         }
       }
 
+      // Render scene
       renderer.render(scene, camera);
+
+      // Draw HUD on top
       drawHUD();
-    }
 
-    // ======== Player Movement ========
-    function updatePlayerMovement(delta) {
-      let speed = 5;
-      if (isSprinting && stamina > 0 && !isCrouched && (controls.forward || controls.backward || controls.left || controls.right)) {
-        speed = 10;
-        stamina -= staminaDrain * delta;
-        if (stamina < 0) stamina = 0;
-      }
-
-      if (controls.crouch) {
-        if (!isCrouched) {
-          yawObject.position.y = playerHeight / 2;
-          isCrouched = true;
-        }
-        speed = 2.5;
-      } else if (isCrouched) {
-        yawObject.position.y = playerHeight;
-        isCrouched = false;
-      }
-
-      if (!controls.crouch && !isSprinting && stamina < maxStamina) {
-        stamina += staminaRegen * delta;
-        if (stamina > maxStamina) stamina = maxStamina;
-      }
-
-      velocity.x -= velocity.x * 10 * delta;
-      velocity.z -= velocity.z * 10 * delta;
-
-      velocity.y -= gravity * delta;
-
-      if (controls.forward) velocity.z -= speed * delta;
-      if (controls.backward) velocity.z += speed * delta;
-      if (controls.left) velocity.x -= speed * delta;
-      if (controls.right) velocity.x += speed * delta;
-
-      yawObject.translateX(velocity.x);
-      yawObject.translateY(velocity.y);
-      yawObject.translateZ(velocity.z);
-
-      if (yawObject.position.y < playerHeight) {
-        velocity.y = 0;
-        yawObject.position.y = playerHeight;
-        canJump = true;
-      }
-    }
-
-    // ======== Update Stamina ========
-    function updateStamina(delta) {
-      if (!isSprinting && stamina < maxStamina) {
-        stamina += staminaRegen * delta;
-        if (stamina > maxStamina) stamina = maxStamina;
-      }
-    }
-
-    // ======== Reload update ========
-    function updateReload(delta) {
-      if (isReloading) {
-        let elapsed = (performance.now() / 1000) - reloadStartTime;
-        const weapon = weaponsData[currentWeapon];
-        if (elapsed >= weapon.reloadTime) {
-          weapon.ammo = weapon.maxAmmo;
-          isReloading = false;
-        }
-      }
+      prevTime = time;
     }
 
     // ======== Start everything ========
