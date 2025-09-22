@@ -77,7 +77,7 @@ function drawPlayer() {
 }
 
 function drawBullets() {
-  ctx.fillStyle = 'red';
+  ctx.fillStyle = 'red'; // RED LASERS
   bullets.forEach((b, i) => {
     b.y -= b.speed;
     ctx.fillRect(b.x, b.y, b.width, b.height);
@@ -140,7 +140,7 @@ function update() {
   if (keys['ArrowRight'] && player.x + player.width < canvas.width) player.x += player.speed;
 
   const now = Date.now();
-  if (keys[' '] && now - lastShotTime > 100) {
+  if (keys[' '] && now - lastShotTime >= 100) {
     bullets.push({
       x: player.x + player.width / 2 - 5,
       y: player.y,
