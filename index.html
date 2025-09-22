@@ -1,107 +1,122 @@
-import pygame
-import random
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HTML Shooter Game</title>
+  <style>
+    canvas {
+      background: url('cool_map.jpg') no-repeat center center;
+      background-size: cover;
+      display: block;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-# Initialize
-pygame.init()
-WIDTH, HEIGHT = 800, 600
-win = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Python Shooter")
+let keys = {};
+let bullets = [];
+let enemies = [];
+let score = 0;
 
-# Colors
-WHITE = (255, 255, 255)
-RED = (255, 0, 0)
+const player = {
+  x: canvas.width / 2 - 25,
+  y: canvas.height - 60,
+  width: 50,
+  height: 50,
+  speed: 5
+};
 
-# Load assets
-player_img = pygame.Surface((50, 50))
-player_img.fill((0, 255, 0))
-enemy_img = pygame.Surface((40, 40))
-enemy_img.fill(RED)
-bullet_img = pygame.Surface((10, 5))
-bullet_img.fill((255, 255, 0))
-background = pygame.image.load("cool_map.jpg")  # Replace with your own image
+document.addEventListener('keydown', e => keys[e.key] = true);
+document.addEventListener('keyup', e => keys[e.key] = false);
 
-# Classes
-class Player(pygame.sprite.Sprite):
-    def __init__(self):
-        super().__init__()
-        self.image = player_img
-        self.rect = self.image.get_rect(center=(WIDTH//2, HEIGHT - 60))
-        self.speed = 5
+function drawPlayer() {
+  ctx.fillStyle = 'lime';
+  ctx.fillRect(player.x, player.y, player.width, player.height);
+}
 
-    def update(self, keys):
-        if keys[pygame.K_LEFT] and self.rect.left > 0:
-            self.rect.x -= self.speed
-        if keys[pygame.K_RIGHT] and self.rect.right < WIDTH:
-            self.rect.x += self.speed
+function drawBullets() {
+  ctx.fillStyle = 'yellow';
+  bullets.forEach((b, i) => {
+    b.y -= b.speed;
+    ctx.fillRect(b.x, b.y, b.width, b.height);
+    if (b.y < 0) bullets.splice(i, 1);
+  });
+}
 
-class Bullet(pygame.sprite.Sprite):
-    def __init__(self, x, y):
-        super().__init__()
-        self.image = bullet_img
-        self.rect = self.image.get_rect(center=(x, y))
-        self.speed = -7
+function drawEnemies() {
+  ctx.fillStyle = 'red';
+  enemies.forEach((e, i) => {
+    e.y += e.speed;
+    ctx.fillRect(e.x, e.y, e.width, e.height);
+    if (e.y > canvas.height) enemies.splice(i, 1);
+  });
+}
 
-    def update(self):
-        self.rect.y += self.speed
-        if self.rect.bottom < 0:
-            self.kill()
+function spawnEnemy() {
+  if (Math.random() < 0.03) {
+    enemies.push({
+      x: Math.random() * (canvas.width - 40),
+      y: -40,
+      width: 40,
+      height: 40,
+      speed: 2 + Math.random() * 2
+    });
+  }
+}
 
-class Enemy(pygame.sprite.Sprite):
-    def __init__(self):
-        super().__init__()
-        self.image = enemy_img
-        self.rect = self.image.get_rect(center=(random.randint(40, WIDTH-40), -40))
-        self.speed = random.randint(2, 4)
+function checkCollisions() {
+  enemies.forEach((e, ei) => {
+    bullets.forEach((b, bi) => {
+      if (b.x < e.x + e.width &&
+          b.x + b.width > e.x &&
+          b.y < e.y + e.height &&
+          b.y + b.height > e.y) {
+        enemies.splice(ei, 1);
+        bullets.splice(bi, 1);
+        score++;
+      }
+    });
+  });
+}
 
-    def update(self):
-        self.rect.y += self.speed
-        if self.rect.top > HEIGHT:
-            self.kill()
+function drawScore() {
+  ctx.fillStyle = 'white';
+  ctx.font = '20px Arial';
+  ctx.fillText('Score: ' + score, 10, 30);
+}
 
-# Groups
-player = Player()
-player_group = pygame.sprite.Group(player)
-bullets = pygame.sprite.Group()
-enemies = pygame.sprite.Group()
+function update() {
+  if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
+  if (keys['ArrowRight'] && player.x + player.width < canvas.width) player.x += player.speed;
+  if (keys[' '] && bullets.length < 10) {
+    bullets.push({
+      x: player.x + player.width / 2 - 5,
+      y: player.y,
+      width: 10,
+      height: 5,
+      speed: 7
+    });
+  }
+}
 
-# Game loop
-clock = pygame.time.Clock()
-score = 0
-font = pygame.font.SysFont(None, 36)
-running = True
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  update();
+  drawPlayer();
+  drawBullets();
+  spawnEnemy();
+  drawEnemies();
+  checkCollisions();
+  drawScore();
+  requestAnimationFrame(gameLoop);
+}
 
-while running:
-    clock.tick(60)
-    win.blit(background, (0, 0))
-
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-            bullet = Bullet(player.rect.centerx, player.rect.top)
-            bullets.add(bullet)
-
-    keys = pygame.key.get_pressed()
-    player.update(keys)
-    bullets.update()
-    enemies.update()
-
-    # Spawn enemies
-    if random.randint(1, 30) == 1:
-        enemies.add(Enemy())
-
-    # Collision
-    hits = pygame.sprite.groupcollide(enemies, bullets, True, True)
-    score += len(hits)
-
-    # Draw
-    player_group.draw(win)
-    bullets.draw(win)
-    enemies.draw(win)
-    score_text = font.render(f"Score: {score}", True, WHITE)
-    win.blit(score_text, (10, 10))
-
-    pygame.display.flip()
-
-pygame.quit()
-
+gameLoop();
+</script>
+</body>
+</html>
