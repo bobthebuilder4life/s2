@@ -1,559 +1,106 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Simple FPS Game with HUD, Weapons, Health & Enemies</title>
-  <style>
-    body { margin: 0; overflow: hidden; background: #333; }
-    canvas { display: block; }
-    #instructions {
-      position: absolute;
-      top: 50%;
-      width: 100%;
-      text-align: center;
-      color: white;
-      font-family: Arial, sans-serif;
-      font-size: 24px;
-      cursor: pointer;
-      user-select: none;
-    }
-  </style>
-</head>
-<body>
-  <div id="instructions">Click to play</div>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.150.1/build/three.min.js"></script>
+import pygame
+import random
+
+# Initialize
+pygame.init()
+WIDTH, HEIGHT = 800, 600
+win = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Python Shooter")
+
+# Colors
+WHITE = (255, 255, 255)
+RED = (255, 0, 0)
+
+# Load assets
+player_img = pygame.Surface((50, 50))
+player_img.fill((0, 255, 0))
+enemy_img = pygame.Surface((40, 40))
+enemy_img.fill(RED)
+bullet_img = pygame.Surface((10, 5))
+bullet_img.fill((255, 255, 0))
+background = pygame.image.load("cool_map.jpg")  # Replace with your own image
+
+# Classes
+class Player(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = player_img
+        self.rect = self.image.get_rect(center=(WIDTH//2, HEIGHT - 60))
+        self.speed = 5
+
+    def update(self, keys):
+        if keys[pygame.K_LEFT] and self.rect.left > 0:
+            self.rect.x -= self.speed
+        if keys[pygame.K_RIGHT] and self.rect.right < WIDTH:
+            self.rect.x += self.speed
+
+class Bullet(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = bullet_img
+        self.rect = self.image.get_rect(center=(x, y))
+        self.speed = -7
+
+    def update(self):
+        self.rect.y += self.speed
+        if self.rect.bottom < 0:
+            self.kill()
+
+class Enemy(pygame.sprite.Sprite):
+    def __init__(self):
+        super().__init__()
+        self.image = enemy_img
+        self.rect = self.image.get_rect(center=(random.randint(40, WIDTH-40), -40))
+        self.speed = random.randint(2, 4)
+
+    def update(self):
+        self.rect.y += self.speed
+        if self.rect.top > HEIGHT:
+            self.kill()
+
+# Groups
+player = Player()
+player_group = pygame.sprite.Group(player)
+bullets = pygame.sprite.Group()
+enemies = pygame.sprite.Group()
+
+# Game loop
+clock = pygame.time.Clock()
+score = 0
+font = pygame.font.SysFont(None, 36)
+running = True
+
+while running:
+    clock.tick(60)
+    win.blit(background, (0, 0))
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+            bullet = Bullet(player.rect.centerx, player.rect.top)
+            bullets.add(bullet)
+
+    keys = pygame.key.get_pressed()
+    player.update(keys)
+    bullets.update()
+    enemies.update()
+
+    # Spawn enemies
+    if random.randint(1, 30) == 1:
+        enemies.add(Enemy())
+
+    # Collision
+    hits = pygame.sprite.groupcollide(enemies, bullets, True, True)
+    score += len(hits)
+
+    # Draw
+    player_group.draw(win)
+    bullets.draw(win)
+    enemies.draw(win)
+    score_text = font.render(f"Score: {score}", True, WHITE)
+    win.blit(score_text, (10, 10))
 
-  <script>
-    // ======== Global Variables =======
-    let hudCanvas, hudCtx;
-    let stamina = 100, maxStamina = 100;
-    let staminaDrain = 20, staminaRegen = 10;
-    let currentWeapon = 0;
+    pygame.display.flip()
 
-    // Add ammo and max ammo for weapons
-    const weaponsData = [
-      { name: 'Pistol', ammo: 12, maxAmmo: 12, reloadTime: 1.5, damage: 20, fireRate: 0.4 },
-      { name: 'Shotgun', ammo: 6, maxAmmo: 6, reloadTime: 2.5, damage: 40, fireRate: 1 },
-      { name: 'Rifle', ammo: 30, maxAmmo: 30, reloadTime: 2, damage: 15, fireRate: 0.1 }
-    ];
-
-    let health = 100, maxHealth = 100;
-
-    let scene, camera, renderer;
-    let playerHeight = 1.8;
-    let velocity = new THREE.Vector3();
-    let controls = { forward: false, backward: false, left: false, right: false, jump: false, crouch: false };
-    let canJump = true;
-    let gravity = 30;
-    let jumpPower = 10;
-    let isSprinting = false;
-    let isCrouched = false;
-    let pitchObject, yawObject;
-
-    let weaponMeshes = []; // holds weapon models
-
-    let prevTime = performance.now();
-
-    let gameOver = false;
-
-    // Shooting control variables
-    let canShoot = true;
-    let lastShotTime = 0;
-    let isReloading = false;
-    let reloadStartTime = 0;
-
-    // Enemy variables
-    let enemy;
-    let enemyHealth = 100;
-
-    // Sounds (simple beep-like with Web Audio API)
-    let audioCtx;
-    let shootSoundBuffer, reloadSoundBuffer, enemyHitSoundBuffer;
-
-    // ======== Create HUD ========
-    function createHUD() {
-      hudCanvas = document.createElement('canvas');
-      hudCanvas.style.position = 'absolute';
-      hudCanvas.style.top = '0';
-      hudCanvas.style.left = '0';
-      hudCanvas.style.pointerEvents = 'none';
-      hudCanvas.width = window.innerWidth;
-      hudCanvas.height = window.innerHeight;
-      document.body.appendChild(hudCanvas);
-      hudCtx = hudCanvas.getContext('2d');
-    }
-
-    // ======== Draw HUD ========
-    function drawHUD() {
-      if (!hudCtx) return;
-
-      hudCtx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
-      hudCtx.save();
-
-      // Stamina Bar background
-      hudCtx.fillStyle = '#000';
-      hudCtx.fillRect(20, 20, 222, 32);
-
-      // Stamina label
-      hudCtx.font = '22px Arial';
-      hudCtx.textAlign = 'left';
-      hudCtx.fillStyle = '#fff';
-      hudCtx.fillText('Stamina', 24, 44);
-
-      // Stamina bar fill
-      hudCtx.fillStyle = '#2ecc70';
-      hudCtx.fillRect(100, 26, (stamina / maxStamina) * 110, 17);
-
-      // Stamina bar border
-      hudCtx.strokeStyle = '#fff';
-      hudCtx.strokeRect(100, 26, 110, 17);
-
-      // Health Bar background
-      hudCtx.fillStyle = '#000';
-      hudCtx.fillRect(20, 60, 222, 32);
-
-      // Health label
-      hudCtx.font = '22px Arial';
-      hudCtx.fillStyle = '#fff';
-      hudCtx.fillText('Health', 24, 84);
-
-      // Health bar fill
-      hudCtx.fillStyle = '#e74c3c';
-      hudCtx.fillRect(100, 66, (health / maxHealth) * 110, 17);
-
-      // Health bar border
-      hudCtx.strokeStyle = '#fff';
-      hudCtx.strokeRect(100, 66, 110, 17);
-
-      // Ammo info
-      hudCtx.fillStyle = '#fff';
-      hudCtx.fillText('Weapon: ' + weaponsData[currentWeapon].name, 24, 110);
-
-      let ammoText = weaponsData[currentWeapon].ammo + " / " + weaponsData[currentWeapon].maxAmmo;
-      hudCtx.fillText('Ammo: ' + ammoText, 24, 134);
-
-      if (isReloading) {
-        hudCtx.fillStyle = '#f39c12';
-        hudCtx.font = '20px Arial';
-        hudCtx.fillText('Reloading...', 150, 134);
-      }
-
-      // Game Over message
-      if (gameOver) {
-        hudCtx.font = '48px Arial';
-        hudCtx.textAlign = 'center';
-        hudCtx.fillStyle = '#be2222';
-        hudCtx.fillText('GAME OVER', hudCanvas.width / 2, hudCanvas.height / 2 - 30);
-        hudCtx.font = '28px Arial';
-        hudCtx.fillStyle = '#fff';
-        hudCtx.fillText('Press SPACE to Restart', hudCanvas.width / 2, hudCanvas.height / 2 + 20);
-      }
-
-      // ===== Crosshair Drawing =====
-      const centerX = hudCanvas.width / 2;
-      const centerY = hudCanvas.height / 2;
-      const size = 10; // length of each line in pixels
-      const lineWidth = 2;
-      const lineColor = '#ffffff';
-
-      hudCtx.strokeStyle = lineColor;
-      hudCtx.lineWidth = lineWidth;
-
-      // Horizontal line
-      hudCtx.beginPath();
-      hudCtx.moveTo(centerX - size, centerY);
-      hudCtx.lineTo(centerX + size, centerY);
-      hudCtx.stroke();
-
-      // Vertical line
-      hudCtx.beginPath();
-      hudCtx.moveTo(centerX, centerY - size);
-      hudCtx.lineTo(centerX, centerY + size);
-      hudCtx.stroke();
-
-      hudCtx.restore();
-    }
-
-    // ======== Window resize handler ========
-    function onWindowResize() {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-
-      renderer.setSize(window.innerWidth, window.innerHeight);
-
-      if (hudCanvas) {
-        hudCanvas.width = window.innerWidth;
-        hudCanvas.height = window.innerHeight;
-      }
-    }
-
-    // ======== Initialize Three.js scene ========
-    function init() {
-      scene = new THREE.Scene();
-
-      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-
-      renderer = new THREE.WebGLRenderer({ antialias: true });
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
-
-      yawObject = new THREE.Object3D();
-      pitchObject = new THREE.Object3D();
-      yawObject.position.y = playerHeight;
-      yawObject.add(pitchObject);
-      pitchObject.add(camera);
-      scene.add(yawObject);
-
-      // Floor
-      const floorGeometry = new THREE.PlaneGeometry(100, 100);
-      const floorMaterial = new THREE.MeshBasicMaterial({ color: 0x444444, side: THREE.DoubleSide });
-      const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-      floor.rotation.x = Math.PI / 2;
-      scene.add(floor);
-
-      // Cube target removed, replaced by enemy cube:
-      createEnemy();
-
-      createHUD();
-      createWeaponModels();
-
-      window.addEventListener('resize', onWindowResize);
-
-      setupControls();
-
-      setupAudio();
-    }
-
-    // ======== Create enemy cube ========
-    function createEnemy() {
-      const enemyGeometry = new THREE.BoxGeometry(1, 1, 1);
-      const enemyMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-      enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
-      enemy.position.set(5, 0.5, -5);
-      scene.add(enemy);
-      enemyHealth = 100;
-      enemy.visible = true;
-    }
-
-    // ======== Create weapon models attached to camera ========
-    function createWeaponModels() {
-      const pistolGeometry = new THREE.BoxGeometry(0.3, 0.15, 0.6);
-      const pistolMaterial = new THREE.MeshBasicMaterial({ color: 0x222222 });
-      const pistol = new THREE.Mesh(pistolGeometry, pistolMaterial);
-      pistol.position.set(0.4, -0.3, -0.8);
-
-      const shotgunGeometry = new THREE.BoxGeometry(0.5, 0.15, 1);
-      const shotgunMaterial = new THREE.MeshBasicMaterial({ color: 0x553311 });
-      const shotgun = new THREE.Mesh(shotgunGeometry, shotgunMaterial);
-      shotgun.position.set(0.5, -0.35, -1);
-
-      const rifleGeometry = new THREE.BoxGeometry(0.7, 0.15, 1.3);
-      const rifleMaterial = new THREE.MeshBasicMaterial({ color: 0x335577 });
-      const rifle = new THREE.Mesh(rifleGeometry, rifleMaterial);
-      rifle.position.set(0.5, -0.3, -1.1);
-
-      const scopeGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.4, 8);
-      const scopeMaterial = new THREE.MeshBasicMaterial({ color: 0x111111 });
-      const scope = new THREE.Mesh(scopeGeometry, scopeMaterial);
-      scope.rotation.z = Math.PI / 2;
-      scope.position.set(0, 0.1, -0.2);
-      rifle.add(scope);
-
-      weaponMeshes.push(pistol, shotgun, rifle);
-
-      weaponMeshes.forEach(mesh => {
-        mesh.visible = false;
-        pitchObject.add(mesh);
-      });
-
-      updateWeaponVisibility();
-    }
-
-    // ======== Update weapon visibility ========
-    function updateWeaponVisibility() {
-      weaponMeshes.forEach((mesh, index) => {
-        mesh.visible = (index === currentWeapon);
-      });
-    }
-
-    // ======== Setup input controls ========
-    function setupControls() {
-      const instructions = document.getElementById('instructions');
-
-      instructions.addEventListener('click', () => {
-        instructions.style.display = 'none';
-        document.body.requestPointerLock();
-      });
-
-      document.addEventListener('pointerlockchange', () => {
-        if (document.pointerLockElement === document.body) {
-          document.addEventListener('mousemove', onMouseMove, false);
-        } else {
-          document.removeEventListener('mousemove', onMouseMove, false);
-          instructions.style.display = '';
-        }
-      });
-
-      document.addEventListener('keydown', (event) => {
-        if (gameOver && event.code === 'Space') {
-          restart();
-          return;
-        }
-
-        switch (event.code) {
-          case 'KeyW': controls.forward = true; break;
-          case 'KeyS': controls.backward = true; break;
-          case 'KeyA': controls.left = true; break;
-          case 'KeyD': controls.right = true; break;
-          case 'ShiftLeft': isSprinting = true; break;
-          case 'ControlLeft': controls.crouch = true; break;
-          case 'Space':
-            if (!gameOver && canJump) {
-              velocity.y = jumpPower;
-              canJump = false;
-            }
-            break;
-          case 'Digit1':
-            currentWeapon = 0;
-            updateWeaponVisibility();
-            break;
-          case 'Digit2':
-            currentWeapon = 1;
-            updateWeaponVisibility();
-            break;
-          case 'Digit3':
-            currentWeapon = 2;
-            updateWeaponVisibility();
-            break;
-          case 'KeyR':
-            reloadWeapon();
-            break;
-        }
-      });
-
-      document.addEventListener('keyup', (event) => {
-        switch (event.code) {
-          case 'KeyW': controls.forward = false; break;
-          case 'KeyS': controls.backward = false; break;
-          case 'KeyA': controls.left = false; break;
-          case 'KeyD': controls.right = false; break;
-          case 'ShiftLeft': isSprinting = false; break;
-          case 'ControlLeft': controls.crouch = false; break;
-        }
-      });
-
-      document.addEventListener('mousedown', (event) => {
-        if (!gameOver) {
-          shootWeapon();
-        }
-      });
-    }
-
-    // ======== Mouse look ========
-    function onMouseMove(event) {
-      const movementX = event.movementX || 0;
-      const movementY = event.movementY || 0;
-
-      yawObject.rotation.y -= movementX * 0.002;
-      pitchObject.rotation.x -= movementY * 0.002;
-      pitchObject.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchObject.rotation.x));
-    }
-
-    // ======== Shooting ========
-    function shootWeapon() {
-      if (isReloading) return;
-
-      const now = performance.now();
-      const weapon = weaponsData[currentWeapon];
-
-      if (!canShoot || weapon.ammo <= 0) {
-        if (weapon.ammo <= 0) reloadWeapon();
-        return;
-      }
-
-      if (now - lastShotTime < weapon.fireRate * 1000) return;
-
-      weapon.ammo--;
-      lastShotTime = now;
-      canShoot = false;
-
-      playShootSound();
-
-      // Check if enemy in front and close enough
-      const raycaster = new THREE.Raycaster();
-      const dir = new THREE.Vector3(0, 0, -1);
-      dir.applyQuaternion(camera.quaternion);
-      raycaster.set(camera.position, dir);
-
-      const intersects = raycaster.intersectObject(enemy);
-      if (intersects.length > 0 && intersects[0].distance < 10 && enemy.visible) {
-        enemyHealth -= weapon.damage;
-        if (enemyHealth <= 0) {
-          enemy.visible = false;
-        }
-        playEnemyHitSound();
-      }
-
-      setTimeout(() => { canShoot = true; }, weapon.fireRate * 1000);
-    }
-
-    // ======== Reload weapon ========
-    function reloadWeapon() {
-      if (isReloading) return;
-
-      const weapon = weaponsData[currentWeapon];
-      if (weapon.ammo === weapon.maxAmmo) return;
-
-      isReloading = true;
-      reloadStartTime = performance.now();
-      playReloadSound();
-    }
-
-    // ======== Restart Game ========
-    function restart() {
-      stamina = maxStamina;
-      health = maxHealth;
-      gameOver = false;
-      createEnemy();
-
-      weaponsData.forEach(w => w.ammo = w.maxAmmo);
-      isReloading = false;
-      canShoot = true;
-      currentWeapon = 0;
-      updateWeaponVisibility();
-    }
-
-    // ======== Audio setup ========
-    function setupAudio() {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-      // Create simple beep sounds
-      shootSoundBuffer = createBeepBuffer(0.1, 600);
-      reloadSoundBuffer = createBeepBuffer(0.3, 300);
-      enemyHitSoundBuffer = createBeepBuffer(0.05, 900);
-    }
-
-    function createBeepBuffer(durationSec, freq) {
-      const sampleRate = audioCtx.sampleRate;
-      const length = sampleRate * durationSec;
-      const buffer = audioCtx.createBuffer(1, length, sampleRate);
-      const data = buffer.getChannelData(0);
-
-      for (let i = 0; i < length; i++) {
-        data[i] = Math.sin(2 * Math.PI * freq * i / sampleRate) * Math.exp(-5 * i / length);
-      }
-
-      return buffer;
-    }
-
-    function playShootSound() {
-      const source = audioCtx.createBufferSource();
-      source.buffer = shootSoundBuffer;
-      source.connect(audioCtx.destination);
-      source.start();
-    }
-
-    function playReloadSound() {
-      const source = audioCtx.createBufferSource();
-      source.buffer = reloadSoundBuffer;
-      source.connect(audioCtx.destination);
-      source.start();
-    }
-
-    function playEnemyHitSound() {
-      const source = audioCtx.createBufferSource();
-      source.buffer = enemyHitSoundBuffer;
-      source.connect(audioCtx.destination);
-      source.start();
-    }
-
-    // ======== Game loop ========
-    function animate() {
-      requestAnimationFrame(animate);
-
-      const time = performance.now();
-      const delta = (time - prevTime) / 1000;
-
-      if (!gameOver) {
-        // Movement speed
-        let speed = 6;
-        if (isSprinting && stamina > 0 && !controls.crouch) {
-          speed = 10;
-          stamina -= staminaDrain * delta;
-          if (stamina < 0) stamina = 0;
-        } else {
-          stamina += staminaRegen * delta;
-          if (stamina > maxStamina) stamina = maxStamina;
-        }
-
-        if (controls.crouch) {
-          isCrouched = true;
-          speed = 3;
-          yawObject.position.y = playerHeight / 2;
-        } else {
-          if (isCrouched) {
-            yawObject.position.y = playerHeight;
-            isCrouched = false;
-          }
-        }
-
-        // Movement vector
-        let moveX = 0, moveZ = 0;
-        if (controls.forward) moveZ -= 1;
-        if (controls.backward) moveZ += 1;
-        if (controls.left) moveX -= 1;
-        if (controls.right) moveX += 1;
-
-        let move = new THREE.Vector3(moveX, 0, moveZ);
-        if (move.length() > 0) move.normalize();
-
-        // Adjust speed by stamina for sprint
-        move.multiplyScalar(speed);
-
-        // Apply movement to velocity
-        velocity.x += (move.x - velocity.x) * 10 * delta;
-        velocity.z += (move.z - velocity.z) * 10 * delta;
-
-        // Gravity and jumping
-        velocity.y -= gravity * delta;
-        yawObject.position.addScaledVector(velocity, delta);
-
-        // Floor collision
-        if (yawObject.position.y < playerHeight) {
-          velocity.y = 0;
-          yawObject.position.y = playerHeight;
-          canJump = true;
-        }
-
-        // Enemy shooting logic could go here (if implemented)
-
-        // Reload timer
-        if (isReloading) {
-          const weapon = weaponsData[currentWeapon];
-          if (time - reloadStartTime >= weapon.reloadTime * 1000) {
-            weapon.ammo = weapon.maxAmmo;
-            isReloading = false;
-          }
-        }
-
-        // Health check
-        if (health <= 0) {
-          gameOver = true;
-        }
-      }
-
-      // Render scene
-      renderer.render(scene, camera);
-
-      // Draw HUD on top
-      drawHUD();
-
-      prevTime = time;
-    }
-
-    // ======== Start everything ========
-    init();
-    animate();
-  </script>
-</body>
-</html>
+pygame.quit()
