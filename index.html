@@ -39,9 +39,9 @@ let rapidFireEnd = 0;
 
 // Load images
 const starshipImg = new Image();
-starshipImg.src = 'https://static.vecteezy.com/system/resources/previews/035/863/522/non_2x/ai-generated-3d-rendering-of-a-space-rocket-on-transparent-background-ai-generated-free-png.png';
+starshipImg.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5f/SpaceX_Starship_SN9.jpg/320px-SpaceX_Starship_SN9.jpg';
 const rockImg = new Image();
-rockImg.src = 'https://static.vecteezy.com/system/resources/thumbnails/050/290/629/small_2x/close-up-asteroid-on-isolated-background-space-concept-dark-rock-asteroid-png.png';
+rockImg.src = 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Asteroid_Bennu.jpg/320px-Asteroid_Bennu.jpg';
 
 // Create stars
 for (let i = 0; i < 100; i++) {
@@ -217,12 +217,14 @@ function update() {
     speedBoostActive = false;
   }
 
+  if (rapidFireActive && now > rapidFireEnd) {
+    rapidFireActive = false;
+  }
+
   if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
   if (keys['ArrowRight'] && player.x + player.width < canvas.width) player.x += player.speed;
 
   const fireRate = rapidFireActive ? 50 : 100;
-  if (rapidFireActive && now > rapidFireEnd) rapidFireActive = false;
-
   if (keys[' '] && now - lastShotTime >= fireRate) {
     bullets.push({
       x: player.x + player.width / 2 - 5,
@@ -244,4 +246,13 @@ function gameLoop() {
     ctx.fillText('GAME OVER', canvas.width / 2 - 120, canvas.height / 2);
     ctx.fillStyle = 'white';
     ctx.font = '20px Arial';
-    ctx.fillText('Final Score: ' + score
+    ctx.fillText('Final Score: ' + score, canvas.width / 2 - 60, canvas.height / 2 + 40);
+    return;
+  }
+
+  if (paused) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'yellow';
+    ctx.font = '40px Arial';
+    ctx.fillText('PAUSED
