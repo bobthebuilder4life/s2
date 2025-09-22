@@ -31,6 +31,11 @@ let lastShotTime = 0;
 let gameOver = false;
 let paused = false;
 let shopOpen = false;
+let shieldActive = false;
+let speedBoostActive = false;
+let rapidFireActive = false;
+let speedBoostEnd = 0;
+let rapidFireEnd = 0;
 
 // Load images
 const starshipImg = new Image();
@@ -53,6 +58,7 @@ const player = {
   y: canvas.height - 120,
   width: 100,
   height: 100,
+  baseSpeed: 12,
   speed: 12,
   health: 3
 };
@@ -64,9 +70,28 @@ document.addEventListener('keydown', e => {
   if (e.key === 's') shopOpen = true;
   if (e.key === 'Escape') shopOpen = false;
 
-  if (shopOpen && e.key === '1' && score >= 5) {
-    player.health++;
-    score -= 5;
+  const now = Date.now();
+
+  if (shopOpen) {
+    if (e.key === '1' && score >= 5) {
+      player.health++;
+      score -= 5;
+    }
+    if (e.key === '2' && score >= 10) {
+      player.speed = player.baseSpeed + 6;
+      speedBoostActive = true;
+      speedBoostEnd = now + 10000;
+      score -= 10;
+    }
+    if (e.key === '3' && score >= 15) {
+      rapidFireActive = true;
+      rapidFireEnd = now + 10000;
+      score -= 15;
+    }
+    if (e.key === '4' && score >= 20) {
+      shieldActive = true;
+      score -= 20;
+    }
   }
 });
 
@@ -148,9 +173,13 @@ function checkCollisions() {
         player.y < r.y + r.height &&
         player.y + player.height > r.y) {
       rocks.splice(ri, 1);
-      player.health--;
-      if (player.health <= 0) {
-        gameOver = true;
+      if (shieldActive) {
+        shieldActive = false;
+      } else {
+        player.health--;
+        if (player.health <= 0) {
+          gameOver = true;
+        }
       }
     }
   });
@@ -161,27 +190,40 @@ function drawScore() {
   ctx.font = '20px Arial';
   ctx.fillText('Score: ' + score, 10, 30);
   ctx.fillText('Health: ' + player.health, 10, 60);
+  if (shieldActive) ctx.fillText('Shield: ON', 10, 90);
 }
 
 function drawShop() {
   ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-  ctx.fillRect(200, 150, 400, 300);
+  ctx.fillRect(200, 100, 400, 400);
   ctx.strokeStyle = 'white';
-  ctx.strokeRect(200, 150, 400, 300);
+  ctx.strokeRect(200, 100, 400, 400);
   ctx.fillStyle = 'white';
   ctx.font = '24px Arial';
-  ctx.fillText('SHOP', 360, 190);
+  ctx.fillText('SHOP', 360, 140);
   ctx.font = '18px Arial';
-  ctx.fillText('1 - Buy +1 Health (5 points)', 250, 240);
-  ctx.fillText('Press Esc to close', 250, 280);
+  ctx.fillText('1 - Buy +1 Health (5 points)', 250, 180);
+  ctx.fillText('2 - Speed Boost (10 points)', 250, 220);
+  ctx.fillText('3 - Rapid Fire (15 points)', 250, 260);
+  ctx.fillText('4 - Shield (20 points)', 250, 300);
+  ctx.fillText('Press Esc to close', 250, 340);
 }
 
 function update() {
+  const now = Date.now();
+
+  if (speedBoostActive && now > speedBoostEnd) {
+    player.speed = player.baseSpeed;
+    speedBoostActive = false;
+  }
+
   if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
   if (keys['ArrowRight'] && player.x + player.width < canvas.width) player.x += player.speed;
 
-  const now = Date.now();
-  if (keys[' '] && now - lastShotTime >= 100) {
+  const fireRate = rapidFireActive ? 50 : 100;
+  if (rapidFireActive && now > rapidFireEnd) rapidFireActive = false;
+
+  if (keys[' '] && now - lastShotTime >= fireRate) {
     bullets.push({
       x: player.x + player.width / 2 - 5,
       y: player.y,
@@ -202,34 +244,4 @@ function gameLoop() {
     ctx.fillText('GAME OVER', canvas.width / 2 - 120, canvas.height / 2);
     ctx.fillStyle = 'white';
     ctx.font = '20px Arial';
-    ctx.fillText('Final Score: ' + score, canvas.width / 2 - 60, canvas.height / 2 + 40);
-    return;
-  }
-
-  if (paused) {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'yellow';
-    ctx.font = '40px Arial';
-    ctx.fillText('PAUSED', canvas.width / 2 - 80, canvas.height / 2);
-    requestAnimationFrame(gameLoop);
-    return;
-  }
-
-  drawStars();
-  update();
-  drawPlayer();
-  drawBullets();
-  spawnRock();
-  drawRocks();
-  checkCollisions();
-  drawScore();
-  if (shopOpen) drawShop();
-  requestAnimationFrame(gameLoop);
-}
-
-gameLoop();
-</script>
-</body>
-</html>
-
+    ctx.fillText('Final Score: ' + score
