@@ -2,20 +2,24 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>HTML Shooter Game</title>
+  <title>Shooter Game</title>
   <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: black;
+    }
     canvas {
-      background: url('cool_map.jpg') no-repeat center center;
-      background-size: cover;
       display: block;
-      margin: 0 auto;
+      margin: auto;
+      background: url('https://i.imgur.com/3eZ3Q6h.jpg') center/cover;
     }
   </style>
 </head>
 <body>
-<canvas id="gameCanvas" width="800" height="600"></canvas>
+<canvas id="game" width="800" height="600"></canvas>
 <script>
-const canvas = document.getElementById('gameCanvas');
+const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
 let keys = {};
@@ -28,7 +32,7 @@ const player = {
   y: canvas.height - 60,
   width: 50,
   height: 50,
-  speed: 5
+  speed: 6
 };
 
 document.addEventListener('keydown', e => keys[e.key] = true);
