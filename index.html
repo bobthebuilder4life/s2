@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Star Shooter Game</title>
+  <title>Starship Shooter</title>
   <style>
     body {
       margin: 0;
@@ -24,9 +24,15 @@ const ctx = canvas.getContext('2d');
 
 let keys = {};
 let bullets = [];
-let enemies = [];
+let rocks = [];
 let stars = [];
 let score = 0;
+
+// Load images
+const starshipImg = new Image();
+starshipImg.src = 'https://i.imgur.com/6XHcZbU.png'; // Starship
+const rockImg = new Image();
+rockImg.src = 'https://i.imgur.com/9z3ZQZg.png'; // Rock
 
 // Create stars
 for (let i = 0; i < 100; i++) {
@@ -66,8 +72,7 @@ function drawStars() {
 }
 
 function drawPlayer() {
-  ctx.fillStyle = 'lime';
-  ctx.fillRect(player.x, player.y, player.width, player.height);
+  ctx.drawImage(starshipImg, player.x, player.y, player.width, player.height);
 }
 
 function drawBullets() {
@@ -79,18 +84,17 @@ function drawBullets() {
   });
 }
 
-function drawEnemies() {
-  ctx.fillStyle = 'red';
-  enemies.forEach((e, i) => {
-    e.y += e.speed;
-    ctx.fillRect(e.x, e.y, e.width, e.height);
-    if (e.y > canvas.height) enemies.splice(i, 1);
+function drawRocks() {
+  rocks.forEach((r, i) => {
+    r.y += r.speed;
+    ctx.drawImage(rockImg, r.x, r.y, r.width, r.height);
+    if (r.y > canvas.height) rocks.splice(i, 1);
   });
 }
 
-function spawnEnemy() {
+function spawnRock() {
   if (Math.random() < 0.03) {
-    enemies.push({
+    rocks.push({
       x: Math.random() * (canvas.width - 40),
       y: -40,
       width: 40,
@@ -101,13 +105,13 @@ function spawnEnemy() {
 }
 
 function checkCollisions() {
-  enemies.forEach((e, ei) => {
+  rocks.forEach((r, ri) => {
     bullets.forEach((b, bi) => {
-      if (b.x < e.x + e.width &&
-          b.x + b.width > e.x &&
-          b.y < e.y + e.height &&
-          b.y + b.height > e.y) {
-        enemies.splice(ei, 1);
+      if (b.x < r.x + r.width &&
+          b.x + b.width > r.x &&
+          b.y < r.y + r.height &&
+          b.y + b.height > r.y) {
+        rocks.splice(ri, 1);
         bullets.splice(bi, 1);
         score++;
       }
@@ -140,8 +144,8 @@ function gameLoop() {
   update();
   drawPlayer();
   drawBullets();
-  spawnEnemy();
-  drawEnemies();
+  spawnRock();
+  drawRocks();
   checkCollisions();
   drawScore();
   requestAnimationFrame(gameLoop);
