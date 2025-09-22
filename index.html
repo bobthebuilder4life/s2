@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Spinning Rocks Game</title>
+  <title>Starship vs Spinning Rocks</title>
   <style>
     body {
       margin: 0;
@@ -27,6 +27,7 @@ let bullets = [];
 let rocks = [];
 let stars = [];
 let score = 0;
+let lastShotTime = 0;
 
 // Load images
 const starshipImg = new Image();
@@ -76,7 +77,7 @@ function drawPlayer() {
 }
 
 function drawBullets() {
-  ctx.fillStyle = 'yellow';
+  ctx.fillStyle = 'red';
   bullets.forEach((b, i) => {
     b.y -= b.speed;
     ctx.fillRect(b.x, b.y, b.width, b.height);
@@ -108,7 +109,7 @@ function spawnRock() {
       height: 100,
       speed: 2 + Math.random() * 2,
       angle: 0,
-      rotationSpeed: (Math.random() - 0.5) * 0.1 // actual spin
+      rotationSpeed: (Math.random() - 0.5) * 0.1
     });
   }
 }
@@ -137,7 +138,9 @@ function drawScore() {
 function update() {
   if (keys['ArrowLeft'] && player.x > 0) player.x -= player.speed;
   if (keys['ArrowRight'] && player.x + player.width < canvas.width) player.x += player.speed;
-  if (keys[' '] && bullets.length < 10) {
+
+  const now = Date.now();
+  if (keys[' '] && now - lastShotTime > 100) {
     bullets.push({
       x: player.x + player.width / 2 - 5,
       y: player.y,
@@ -145,6 +148,7 @@ function update() {
       height: 5,
       speed: 7
     });
+    lastShotTime = now;
   }
 }
 
