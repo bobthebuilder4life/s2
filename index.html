@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Shooter Game</title>
+  <title>Star Shooter Game</title>
   <style>
     body {
       margin: 0;
@@ -12,27 +12,31 @@
     canvas {
       display: block;
       margin: auto;
-      background: url('https://i.imgur.com/3eZ3Q6h.jpg') center/cover;
+      background: black;
     }
   </style>
-<style>
-  body {
-    margin: 0;
-    overflow: hidden;
-    background: black;
-  }
-  canvas {
-    display: block;
-    margin: auto;
-    background: url('https://i.imgur.com/3eZ3Q6h.jpg') center/cover;
-  }
-</style>
-
+</head>
+<body>
+<canvas id="game" width="800" height="600"></canvas>
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
 
 let keys = {};
 let bullets = [];
 let enemies = [];
+let stars = [];
 let score = 0;
+
+// Create stars
+for (let i = 0; i < 100; i++) {
+  stars.push({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    radius: Math.random() * 2,
+    speed: 0.5 + Math.random()
+  });
+}
 
 const player = {
   x: canvas.width / 2 - 25,
@@ -44,6 +48,22 @@ const player = {
 
 document.addEventListener('keydown', e => keys[e.key] = true);
 document.addEventListener('keyup', e => keys[e.key] = false);
+
+function drawStars() {
+  ctx.fillStyle = 'black';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'white';
+  stars.forEach(star => {
+    ctx.beginPath();
+    ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+    ctx.fill();
+    star.y += star.speed;
+    if (star.y > canvas.height) {
+      star.y = 0;
+      star.x = Math.random() * canvas.width;
+    }
+  });
+}
 
 function drawPlayer() {
   ctx.fillStyle = 'lime';
@@ -116,32 +136,16 @@ function update() {
 }
 
 function gameLoop() {
-let stars = [];
-for (let i = 0; i < 100; i++) {
-  stars.push({
-    x: Math.random() * canvas.width,
-    y: Math.random() * canvas.height,
-    radius: Math.random() * 2,
-    speed: 0.5 + Math.random()
-  });
+  drawStars();
+  update();
+  drawPlayer();
+  drawBullets();
+  spawnEnemy();
+  drawEnemies();
+  checkCollisions();
+  drawScore();
+  requestAnimationFrame(gameLoop);
 }
-
-function drawStars() {
-  ctx.fillStyle = 'black';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'white';
-  stars.forEach(star => {
-    ctx.beginPath();
-    ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
-    ctx.fill();
-    star.y += star.speed;
-    if (star.y > canvas.height) {
-      star.y = 0;
-      star.x = Math.random() * canvas.width;
-    }
-  });
-}
-
 
 gameLoop();
 </script>
